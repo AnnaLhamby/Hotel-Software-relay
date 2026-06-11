@@ -1,4 +1,4 @@
-const CACHE_NAME = 'hotel-ops-static-v1';
+const CACHE_NAME = 'hotel-ops-static-v2';
 const ASSETS = ['./', './index.html', './styles.css', './script.js', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', (event) => {

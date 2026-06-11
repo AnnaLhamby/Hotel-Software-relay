@@ -37,6 +37,10 @@ let tasks = loadTasks();
 const statuses = ['New Requests', 'In Progress', 'Waiting', 'Completed'];
 const departments = ['Housekeeping', 'Maintenance', 'F&B', 'Concierge', 'Front Desk'];
 let activeTaskId = 'TSK-882';
+let captureTranscript = 'Guest in room 305: Can I get two extra pillows and fix the air conditioner?';
+let extractedTasks = extractTasks(captureTranscript);
+let recognition = null;
+let isListening = false;
 
 function init() {
   document.querySelectorAll('[data-icon]').forEach((node) => {
@@ -129,30 +133,31 @@ function renderGuest() {
 }
 
 function renderCapture() {
-  const extracted = [
-    { title: 'Extra Pillows', department: 'Housekeeping', priority: 'Medium' },
-    { title: 'AC Issue', department: 'Maintenance', priority: 'High' },
-  ];
+  const speechSupported = Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
   document.getElementById('capture').innerHTML = `
     <div class="capture-grid">
       <div>
         <div class="panel listen-panel">
           <div>
             <div class="mic-box"><button class="mic-core" id="captureToggle" aria-label="Toggle listening"><span data-icon="mic"></span></button></div>
-            <h2 id="listenLabel">Listening...</h2>
-            <p class="eyebrow">HOLD SPACE TO TALK</p>
-            <div class="transcript">"Guest in 305: Can I get two extra pillows and fix the air conditioner?"</div>
+            <h2 id="listenLabel">${isListening ? 'Listening...' : 'Audio Capture'}</h2>
+            <p class="eyebrow">${speechSupported ? 'CLICK MICROPHONE TO START / STOP' : 'TYPE OR PASTE TRANSCRIPT BELOW'}</p>
+            <textarea class="transcript-input" id="captureTranscript" rows="4">${escapeHTML(captureTranscript)}</textarea>
+            <div class="submit-row compact"><button class="small-button" id="analyzeTranscript">Analyze Transcript</button><button class="small-button" id="clearTranscript">Clear</button></div>
           </div>
         </div>
         <div class="panel extraction">
-          <div class="extraction-head"><p class="eyebrow">AI TASK EXTRACTION</p><p class="eyebrow">2 TASKS IDENTIFIED</p></div>
-          ${extracted.map((task) => `
+          <div class="extraction-head"><p class="eyebrow">TASK EXTRACTION</p><p class="eyebrow" id="taskCount">${extractedTasks.length} TASKS IDENTIFIED</p></div>
+          <div id="extractedTasks">
+          ${extractedTasks.map((task, index) => `
             <div class="extracted-task ${task.priority === 'High' ? 'urgent' : ''}">
               <div class="bar"></div>
-              <div><h3>${task.title}</h3><span class="pill">${task.department}</span> <span class="pill ${task.priority === 'High' ? 'red' : ''}">${task.priority} Prio</span></div>
-              <div class="tiny-actions"><button aria-label="Edit">✎</button><button aria-label="Delete">⌫</button></div>
+              <div><h3>${task.title}</h3><span class="pill">Room ${task.room}</span> <span class="pill">${task.department}</span> <span class="pill ${['High', 'Urgent'].includes(task.priority) ? 'red' : ''}">${task.priority} Prio</span></div>
+              <div class="tiny-actions"><button data-remove-extracted="${index}" aria-label="Delete">⌫</button></div>
             </div>
           `).join('')}
+          ${extractedTasks.length ? '' : '<div class="empty-extraction">No tasks identified yet. Capture or type a conversation, then analyze it.</div>'}
+          </div>
           <div class="submit-row"><button class="small-button" id="discardExtracted">Discard All</button><button class="primary" id="submitExtracted">Submit Tasks</button></div>
         </div>
       </div>
@@ -172,14 +177,42 @@ function renderCapture() {
   `;
   bindIcons(document.getElementById('capture'));
   document.getElementById('submitExtracted').addEventListener('click', () => {
-    extracted.forEach((task) => addTask({ ...task, room: '305', source: 'Front Desk Audio', notes: 'Extracted from front desk conversation.' }, false));
+    if (!extractedTasks.length) {
+      toast('No extracted tasks to submit');
+      return;
+    }
+    extractedTasks.forEach((task) => addTask({ ...task, source: 'Front Desk Audio', notes: `Extracted from transcript: "${captureTranscript}"` }, false));
     toast('Extracted tasks submitted to Kanban');
+    captureTranscript = '';
+    extractedTasks = [];
     render();
   });
-  document.getElementById('discardExtracted').addEventListener('click', () => toast('Draft extraction discarded'));
-  document.getElementById('captureToggle').addEventListener('click', () => {
-    const label = document.getElementById('listenLabel');
-    label.textContent = label.textContent === 'Listening...' ? 'Paused' : 'Listening...';
+  document.getElementById('discardExtracted').addEventListener('click', () => {
+    extractedTasks = [];
+    updateExtractionUI();
+    toast('Draft extraction discarded');
+  });
+  document.getElementById('captureToggle').addEventListener('click', toggleSpeechCapture);
+  document.getElementById('analyzeTranscript').addEventListener('click', () => {
+    captureTranscript = document.getElementById('captureTranscript').value.trim();
+    extractedTasks = extractTasks(captureTranscript);
+    updateExtractionUI();
+    toast(`${extractedTasks.length} task${extractedTasks.length === 1 ? '' : 's'} identified`);
+  });
+  document.getElementById('clearTranscript').addEventListener('click', () => {
+    captureTranscript = '';
+    extractedTasks = [];
+    document.getElementById('captureTranscript').value = '';
+    updateExtractionUI();
+  });
+  document.getElementById('captureTranscript').addEventListener('input', (event) => {
+    captureTranscript = event.currentTarget.value;
+  });
+  document.querySelectorAll('[data-remove-extracted]').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      extractedTasks.splice(Number(event.currentTarget.dataset.removeExtracted), 1);
+      updateExtractionUI();
+    });
   });
 }
 
@@ -273,7 +306,7 @@ function renderReporting() {
     </div>
     <div class="report-grid" style="margin-top:16px">
       <div class="panel"><div class="panel-head"><h3>Volume by Department</h3></div><div class="progress-list">${Object.entries(departmentCounts()).map(([name, value]) => `<div class="progress-row"><span>${name}</span><strong>${value * 9}%</strong><div class="track"><div class="fill" style="width:${Math.min(value * 22, 100)}%"></div></div></div>`).join('')}</div></div>
-      <div class="panel"><div class="panel-head"><h3>Staff Performance Leaderboard</h3><button class="small-button">View All</button></div>${leaderboard()}</div>
+      <div class="panel leaderboard-panel"><div class="panel-head"><h3>Staff Performance Leaderboard</h3><button class="small-button">View All</button></div>${leaderboard()}</div>
     </div>
   `;
 }
@@ -404,12 +437,161 @@ function staffTable() {
 }
 
 function leaderboard() {
-  return `<table class="table"><thead><tr><th>Name</th><th>Department</th><th>Tasks</th><th>Avg. Time</th><th>Rating</th></tr></thead><tbody>
+  return `<table class="table leaderboard-table"><thead><tr><th>Name</th><th>Department</th><th>Tasks</th><th>Avg. Time</th><th>Rating</th></tr></thead><tbody>
     <tr><td><strong>Elena Rodriguez</strong></td><td>Housekeeping</td><td>142</td><td>8m 40s</td><td><strong>4.9</strong></td></tr>
     <tr><td><strong>Marcus Chen</strong></td><td>Maintenance</td><td>98</td><td>15m 12s</td><td><strong>4.8</strong></td></tr>
     <tr><td><strong>Sarah Jenkins</strong></td><td>F&B</td><td>115</td><td>6m 22s</td><td><strong>4.7</strong></td></tr>
     <tr><td><strong>David Kim</strong></td><td>Front Desk</td><td>87</td><td>4m 15s</td><td><strong>4.9</strong></td></tr>
   </tbody></table>`;
+}
+
+function toggleSpeechCapture() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    toast('Speech capture is not supported in this browser. Type the transcript and click Analyze.');
+    return;
+  }
+
+  if (isListening && recognition) {
+    recognition.stop();
+    return;
+  }
+
+  recognition = new SpeechRecognition();
+  recognition.continuous = true;
+  recognition.interimResults = true;
+  recognition.lang = 'en-US';
+
+  let finalTranscript = captureTranscript ? `${captureTranscript.trim()} ` : '';
+  recognition.onstart = () => {
+    isListening = true;
+    const label = document.getElementById('listenLabel');
+    if (label) label.textContent = 'Listening...';
+    toast('Listening started');
+  };
+  recognition.onresult = (event) => {
+    let interim = '';
+    for (let index = event.resultIndex; index < event.results.length; index += 1) {
+      const phrase = event.results[index][0].transcript;
+      if (event.results[index].isFinal) {
+        finalTranscript += `${phrase.trim()} `;
+      } else {
+        interim += phrase;
+      }
+    }
+    captureTranscript = `${finalTranscript}${interim}`.trim();
+    const transcriptField = document.getElementById('captureTranscript');
+    if (transcriptField) transcriptField.value = captureTranscript;
+    extractedTasks = extractTasks(captureTranscript);
+    updateExtractionUI();
+  };
+  recognition.onerror = (event) => {
+    isListening = false;
+    toast(event.error === 'not-allowed' ? 'Microphone permission was blocked' : 'Speech capture stopped');
+    const label = document.getElementById('listenLabel');
+    if (label) label.textContent = 'Audio Capture';
+  };
+  recognition.onend = () => {
+    isListening = false;
+    const label = document.getElementById('listenLabel');
+    if (label) label.textContent = 'Audio Capture';
+    extractedTasks = extractTasks(captureTranscript);
+    updateExtractionUI();
+  };
+  recognition.start();
+}
+
+function updateExtractionUI() {
+  const count = document.getElementById('taskCount');
+  const list = document.getElementById('extractedTasks');
+  if (!count || !list) return;
+  count.textContent = `${extractedTasks.length} TASK${extractedTasks.length === 1 ? '' : 'S'} IDENTIFIED`;
+  list.innerHTML = extractedTasks.length
+    ? extractedTasks.map((task, index) => `
+      <div class="extracted-task ${task.priority === 'High' ? 'urgent' : ''}">
+        <div class="bar"></div>
+        <div><h3>${escapeHTML(task.title)}</h3><span class="pill">Room ${escapeHTML(task.room)}</span> <span class="pill">${escapeHTML(task.department)}</span> <span class="pill ${['High', 'Urgent'].includes(task.priority) ? 'red' : ''}">${escapeHTML(task.priority)} Prio</span></div>
+        <div class="tiny-actions"><button data-remove-extracted="${index}" aria-label="Delete">⌫</button></div>
+      </div>
+    `).join('')
+    : '<div class="empty-extraction">No tasks identified yet. Capture or type a conversation, then analyze it.</div>';
+  list.querySelectorAll('[data-remove-extracted]').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      extractedTasks.splice(Number(event.currentTarget.dataset.removeExtracted), 1);
+      updateExtractionUI();
+    });
+  });
+}
+
+function extractTasks(transcript) {
+  const text = transcript.trim();
+  if (!text) return [];
+  const lower = text.toLowerCase();
+  const room = findRoom(lower);
+  const priority = inferPriority(lower);
+  const rules = [
+    { title: 'Extra Pillows', department: 'Housekeeping', keywords: ['pillow', 'pillows'] },
+    { title: 'Extra Towels & Linens', department: 'Housekeeping', keywords: ['towel', 'towels', 'linen', 'linens', 'blanket', 'blankets'] },
+    { title: 'Room Cleaning', department: 'Housekeeping', keywords: ['clean room', 'room cleaning', 'make up room', 'housekeeping'] },
+    { title: 'Water Refill', department: 'Housekeeping', keywords: ['water refill', 'bottled water', 'more water'] },
+    { title: 'Toiletries', department: 'Housekeeping', keywords: ['toiletries', 'toothbrush', 'soap', 'shampoo', 'conditioner'] },
+    { title: 'Laundry Pickup', department: 'Housekeeping', keywords: ['laundry', 'dry cleaning'] },
+    { title: 'Mini-bar Restock', department: 'Housekeeping', keywords: ['mini bar', 'minibar', 'restock'] },
+    { title: 'AC Repair', department: 'Maintenance', keywords: ['air conditioner', 'air conditioning', 'a/c', 'ac ', 'ac unit', 'temperature'] },
+    { title: 'Maintenance Issue', department: 'Maintenance', keywords: ['broken', 'repair', 'fix', 'leak', 'leaking', 'noise', 'rattling', 'light out', 'toilet'] },
+    { title: 'In-Room Dining', department: 'F&B', keywords: ['food', 'dinner', 'breakfast', 'lunch', 'room service', 'coffee', 'tea'] },
+    { title: 'Ice Bucket Refill', department: 'F&B', keywords: ['ice bucket', 'ice'] },
+    { title: 'Luggage Assistance', department: 'Concierge', keywords: ['luggage', 'bags', 'bag', 'suitcase'] },
+    { title: 'Concierge Service', department: 'Concierge', keywords: ['taxi', 'reservation', 'concierge', 'directions', 'recommendation'] },
+    { title: 'Late Checkout Request', department: 'Front Desk', keywords: ['late checkout', 'check out', 'checkout'] },
+  ];
+
+  const matches = rules
+    .filter((rule) => rule.keywords.some((keyword) => lower.includes(keyword)))
+    .map((rule) => ({
+      title: rule.title,
+      department: rule.department,
+      priority: rule.department === 'Maintenance' && priority === 'Medium' ? 'High' : priority,
+      room,
+    }));
+
+  if (matches.length) return dedupeTasks(matches);
+  return [{
+    title: 'General Guest Request',
+    department: 'Front Desk',
+    priority,
+    room,
+  }];
+}
+
+function findRoom(text) {
+  const match = text.match(/(?:room|guest in|guest from)\s*#?(\d{2,4})/i);
+  return match ? match[1] : 'Unknown';
+}
+
+function inferPriority(text) {
+  if (/(urgent|immediately|as soon as possible|asap|flood|leak|broken|no power|no air|medical|sick)/i.test(text)) return 'High';
+  if (/(waiting|delay|soon|uncomfortable|concerned|complaint)/i.test(text)) return 'Medium';
+  return 'Normal';
+}
+
+function dedupeTasks(items) {
+  const seen = new Set();
+  return items.filter((item) => {
+    const key = `${item.title}-${item.room}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function escapeHTML(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
 }
 
 function bindIcons(scope) {
