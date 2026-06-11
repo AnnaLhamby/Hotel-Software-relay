@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hotel Operations System</title>
+    <meta name="description" content="A hotel operations system for guest requests, front desk audio task capture, Kanban workflows, and analytics." />
+    <meta name="theme-color" content="#000000" />
+    <meta property="og:title" content="Hotel Operations System" />
+    <meta property="og:description" content="Guest request portal, staff task capture, Kanban operations, and reporting dashboard." />
+    <meta property="og:type" content="website" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">床</div>
+          <div>
+            <h1>台南遠東香格里拉</h1>
+            <p id="portalLabel">STAFF PORTAL</p>
+          </div>
+        </div>
+
+        <nav class="nav" aria-label="Primary">
+          <button class="nav-item" data-view="guest">
+            <span data-icon="grid"></span>
+            Guest Portal
+          </button>
+          <button class="nav-item active" data-view="capture">
+            <span data-icon="mic"></span>
+            Task Capture
+          </button>
+          <button class="nav-item" data-view="kanban">
+            <span data-icon="kanban"></span>
+            Kanban Board
+          </button>
+          <button class="nav-item" data-view="ops">
+            <span data-icon="chart"></span>
+            Ops Control
+          </button>
+          <button class="nav-item" data-view="reporting">
+            <span data-icon="report"></span>
+            Reporting
+          </button>
+        </nav>
+
+        <div class="sidebar-footer">
+          <button class="primary full" id="quickCreate">Create Task</button>
+          <button class="utility"><span data-icon="help"></span>Support</button>
+          <button class="utility"><span data-icon="logout"></span>Log Out</button>
+        </div>
+      </aside>
+
+      <main>
+        <header class="topbar">
+          <label class="search">
+            <span data-icon="search"></span>
+            <input id="globalSearch" type="search" placeholder="Search tasks..." />
+          </label>
+          <div class="top-actions">
+            <button class="icon-button" aria-label="Notifications"><span data-icon="bell"></span><i></i></button>
+            <button class="icon-button" aria-label="Messages"><span data-icon="message"></span></button>
+            <button class="icon-button" aria-label="Settings"><span data-icon="settings"></span></button>
+            <div class="avatar" aria-label="User avatar">JD</div>
+          </div>
+        </header>
+
+        <section id="guest" class="view"></section>
+        <section id="capture" class="view active"></section>
+        <section id="kanban" class="view"></section>
+        <section id="task" class="view"></section>
+        <section id="ops" class="view"></section>
+        <section id="reporting" class="view"></section>
+      </main>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <dialog id="taskDialog">
+      <form method="dialog" class="dialog-card" id="taskForm">
+        <div class="dialog-head">
+          <div>
+            <p class="eyebrow">MANUAL ENTRY</p>
+            <h2>Create Task</h2>
+          </div>
+          <button class="icon-button" type="button" id="closeDialog" aria-label="Close"><span data-icon="x"></span></button>
+        </div>
+        <div class="field-grid">
+          <label>Room<input name="room" required placeholder="402" /></label>
+          <label>Department<select name="department"><option>Housekeeping</option><option>Maintenance</option><option>F&B</option><option>Concierge</option><option>Front Desk</option></select></label>
+          <label>Priority<select name="priority"><option>Normal</option><option>Medium</option><option>High</option><option>Urgent</option></select></label>
+          <label>Assignee<select name="assignee"><option>Unassigned</option><option>Sarah J.</option><option>Marcus V.</option><option>Maria S.</option><option>John D.</option></select></label>
+        </div>
+        <label>Request<input name="title" required placeholder="Extra towels" /></label>
+        <label>Notes<textarea name="notes" rows="4" placeholder="Add context for the team..."></textarea></label>
+        <div class="dialog-actions">
+          <button type="button" id="cancelDialog">Cancel</button>
+          <button class="primary" value="submit">Create Task</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="script.js"></script>
+  </body>
+</html>
