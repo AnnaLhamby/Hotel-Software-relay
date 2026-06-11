@@ -346,7 +346,7 @@ function taskCard(task) {
       <select data-move="${task.id}" aria-label="Move task">
         ${statuses.map((status) => `<option ${status === task.status ? 'selected' : ''}>${status}</option>`).join('')}
       </select>
-      <button class="small-button danger-button" data-delete-task="${task.id}">Delete</button>
+      <button class="delete-icon-button" data-delete-task="${task.id}" aria-label="Delete task">×</button>
     </div>
   </article>`;
 }

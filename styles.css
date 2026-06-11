@@ -556,12 +556,26 @@ textarea:focus, input:focus, select:focus { border-color: #000; }
 .card-actions {
   margin-top: auto;
   display: grid;
-  grid-template-columns: auto minmax(112px, 1fr) auto;
+  grid-template-columns: auto minmax(98px, 1fr) 32px;
 }
 
-.danger-button {
-  border-color: #f0b4b4;
+.delete-icon-button {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #f0b4b4;
+  background: #fff;
   color: var(--danger);
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+  line-height: 1;
+  font-weight: 800;
+  padding: 0;
+}
+
+.delete-icon-button:hover {
+  background: #fff0f0;
+  border-color: var(--danger);
 }
 
 .detail-grid {
