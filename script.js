@@ -57,7 +57,7 @@ function init() {
   document.getElementById('cancelDialog').addEventListener('click', () => document.getElementById('taskDialog').close());
   document.getElementById('taskForm').addEventListener('submit', createManualTask);
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
+    navigator.serviceWorker.register('./sw.js?v=3').then((registration) => registration.update()).catch(() => {});
   }
   render();
   setInterval(updateClock, 1000);
