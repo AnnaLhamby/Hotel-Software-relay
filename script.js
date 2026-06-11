@@ -150,11 +150,7 @@ function renderCapture() {
           <div class="extraction-head"><p class="eyebrow">TASK EXTRACTION</p><p class="eyebrow" id="taskCount">${extractedTasks.length} TASKS IDENTIFIED</p></div>
           <div id="extractedTasks">
           ${extractedTasks.map((task, index) => `
-            <div class="extracted-task ${task.priority === 'High' ? 'urgent' : ''}">
-              <div class="bar"></div>
-              <div><h3>${task.title}</h3><span class="pill">Room ${task.room}</span> <span class="pill">${task.department}</span> <span class="pill ${['High', 'Urgent'].includes(task.priority) ? 'red' : ''}">${task.priority} Prio</span></div>
-              <div class="tiny-actions"><button data-remove-extracted="${index}" aria-label="Delete">⌫</button></div>
-            </div>
+            ${extractedTaskMarkup(task, index)}
           `).join('')}
           ${extractedTasks.length ? '' : '<div class="empty-extraction">No tasks identified yet. Capture or type a conversation, then analyze it.</div>'}
           </div>
@@ -163,12 +159,6 @@ function renderCapture() {
       </div>
       <div>
         <div class="panel side-panel">
-          <div class="panel-head"><p class="eyebrow">REFINEMENT CONTROLS</p></div>
-          <label>Category<select><option>Housekeeping</option><option>Maintenance</option></select></label>
-          <label>Department<select><option>Luxury Suites</option><option>Guest Rooms</option></select></label>
-          <label>Priority<select><option>Medium</option><option>High</option></select></label>
-        </div>
-        <div class="panel side-panel" style="margin-top:14px">
           <div class="panel-head"><p class="eyebrow">RECENT REQUESTS</p></div>
           <div class="timeline-list">${tasks.slice(0, 4).map((task) => `<div class="timeline-item"><span class="dot"></span><div><strong>${task.title}</strong><br>Status: ${task.status.toUpperCase()}</div><span>${task.created}m ago</span></div>`).join('')}</div>
         </div>
@@ -181,7 +171,11 @@ function renderCapture() {
       toast('No extracted tasks to submit');
       return;
     }
-    extractedTasks.forEach((task) => addTask({ ...task, source: 'Front Desk Audio', notes: `Extracted from transcript: "${captureTranscript}"` }, false));
+    extractedTasks.forEach((task) => addTask({
+      ...task,
+      source: 'Front Desk Audio',
+      notes: task.details || `Extracted from transcript: "${captureTranscript}"`,
+    }, false));
     toast('Extracted tasks submitted to Kanban');
     captureTranscript = '';
     extractedTasks = [];
@@ -214,6 +208,7 @@ function renderCapture() {
       updateExtractionUI();
     });
   });
+  bindExtractedTaskEditors();
 }
 
 function renderKanban() {
@@ -229,6 +224,17 @@ function renderKanban() {
 
 function renderTaskDetail() {
   const task = tasks.find((item) => item.id === activeTaskId) || tasks[0];
+  if (!task) {
+    document.getElementById('task').innerHTML = `
+      <div class="panel special">
+        <h2>No task selected</h2>
+        <p>There are no tasks on the board right now.</p>
+        <button class="primary" id="emptyBackToKanban">Back to Kanban</button>
+      </div>
+    `;
+    document.getElementById('emptyBackToKanban').addEventListener('click', () => setView('kanban'));
+    return;
+  }
   document.getElementById('task').innerHTML = `
     <button class="small-button" id="backToKanban"><span data-icon="back"></span> TASK CAPTURE / ${task.department.toUpperCase()} / ${task.id}</button>
     <div class="detail-title">
@@ -340,6 +346,7 @@ function taskCard(task) {
       <select data-move="${task.id}" aria-label="Move task">
         ${statuses.map((status) => `<option ${status === task.status ? 'selected' : ''}>${status}</option>`).join('')}
       </select>
+      <button class="small-button danger-button" data-delete-task="${task.id}">Delete</button>
     </div>
   </article>`;
 }
@@ -353,6 +360,9 @@ function bindTaskCardEvents() {
   });
   document.querySelectorAll('[data-move]').forEach((select) => {
     select.addEventListener('change', (event) => moveTask(event.currentTarget.dataset.move, event.currentTarget.value));
+  });
+  document.querySelectorAll('[data-delete-task]').forEach((button) => {
+    button.addEventListener('click', (event) => deleteTask(event.currentTarget.dataset.deleteTask));
   });
 }
 
@@ -387,6 +397,18 @@ function moveTask(id, status) {
   saveTasks();
   render();
   toast(`${task.title} moved to ${status}`);
+}
+
+function deleteTask(id) {
+  const task = tasks.find((item) => item.id === id);
+  if (!task) return;
+  const confirmed = window.confirm(`Delete task "${task.title}"?`);
+  if (!confirmed) return;
+  tasks = tasks.filter((item) => item.id !== id);
+  if (activeTaskId === id) activeTaskId = tasks[0]?.id || '';
+  saveTasks();
+  render();
+  toast(`${task.title} deleted`);
 }
 
 function createManualTask(event) {
@@ -508,11 +530,7 @@ function updateExtractionUI() {
   count.textContent = `${extractedTasks.length} TASK${extractedTasks.length === 1 ? '' : 'S'} IDENTIFIED`;
   list.innerHTML = extractedTasks.length
     ? extractedTasks.map((task, index) => `
-      <div class="extracted-task ${task.priority === 'High' ? 'urgent' : ''}">
-        <div class="bar"></div>
-        <div><h3>${escapeHTML(task.title)}</h3><span class="pill">Room ${escapeHTML(task.room)}</span> <span class="pill">${escapeHTML(task.department)}</span> <span class="pill ${['High', 'Urgent'].includes(task.priority) ? 'red' : ''}">${escapeHTML(task.priority)} Prio</span></div>
-        <div class="tiny-actions"><button data-remove-extracted="${index}" aria-label="Delete">⌫</button></div>
-      </div>
+      ${extractedTaskMarkup(task, index)}
     `).join('')
     : '<div class="empty-extraction">No tasks identified yet. Capture or type a conversation, then analyze it.</div>';
   list.querySelectorAll('[data-remove-extracted]').forEach((button) => {
@@ -521,6 +539,41 @@ function updateExtractionUI() {
       updateExtractionUI();
     });
   });
+  bindExtractedTaskEditors();
+}
+
+function extractedTaskMarkup(task, index) {
+  return `
+    <div class="extracted-task editable-extracted ${['High', 'Urgent'].includes(task.priority) ? 'urgent' : ''}">
+      <div class="bar"></div>
+      <div class="extracted-fields">
+        <label>Task<input data-extracted-field="title" data-index="${index}" value="${escapeHTML(task.title)}" /></label>
+        <label>Room<input data-extracted-field="room" data-index="${index}" value="${escapeHTML(task.room)}" /></label>
+        <label>Responsible<select data-extracted-field="department" data-index="${index}">
+          ${departments.map((department) => `<option ${department === task.department ? 'selected' : ''}>${department}</option>`).join('')}
+        </select></label>
+        <label>Priority<select data-extracted-field="priority" data-index="${index}">
+          ${['Normal', 'Medium', 'High', 'Urgent'].map((priority) => `<option ${priority === task.priority ? 'selected' : ''}>${priority}</option>`).join('')}
+        </select></label>
+        <label class="wide">Details<textarea data-extracted-field="details" data-index="${index}" rows="2">${escapeHTML(task.details || '')}</textarea></label>
+      </div>
+      <div class="tiny-actions"><button data-remove-extracted="${index}" aria-label="Delete">⌫</button></div>
+    </div>
+  `;
+}
+
+function bindExtractedTaskEditors() {
+  document.querySelectorAll('[data-extracted-field]').forEach((field) => {
+    field.addEventListener('input', updateExtractedTaskFromField);
+    field.addEventListener('change', updateExtractedTaskFromField);
+  });
+}
+
+function updateExtractedTaskFromField(event) {
+  const index = Number(event.currentTarget.dataset.index);
+  const field = event.currentTarget.dataset.extractedField;
+  if (!extractedTasks[index]) return;
+  extractedTasks[index][field] = event.currentTarget.value;
 }
 
 function extractTasks(transcript) {
